@@ -84,8 +84,6 @@ class SessionRefresh(MiddlewareMixin):
             is_oidc_enabled = issubclass(auth_backend, OIDCAuthenticationBackend)
 
         return (
-            request.method == 'GET' and
-            request.user.is_authenticated and
             (not get_only or request.method == 'GET') and
             is_authenticated(request.user) and
             is_oidc_enabled and
@@ -183,6 +181,8 @@ class RefreshOIDCToken(SessionRefresh):
             if renew_refresh_token and request.method.upper() == 'GET':
                 return super(RefreshOIDCToken, self).process_request(request)
             else:
+                # Since SessionRefresh ignore POST requests, refresh token
+                # expires during POST requests are not passed to super class.
                 raise PermissionDenied('Refresh token expired')
 
         if not refresh_token:
@@ -201,7 +201,8 @@ class RefreshOIDCToken(SessionRefresh):
             data=token_payload,
             verify=import_from_settings('OIDC_VERIFY_SSL', True),
         )
-        response.raise_for_status()
+        if response.status_code != 200:
+            return super(RefreshOIDCToken, self).process_request(request)
 
         token_info = response.json()
         id_token = token_info.get('id_token')
