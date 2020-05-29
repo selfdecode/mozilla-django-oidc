@@ -13,6 +13,7 @@ except ImportError:
 
 from mock import Mock, patch
 
+import django
 from django.conf.urls import url
 from django.contrib.auth import get_user_model
 from django.contrib.auth.signals import user_logged_out
@@ -28,6 +29,7 @@ from mozilla_django_oidc.urls import urlpatterns as orig_urlpatterns
 
 
 User = get_user_model()
+DJANGO_VERSION = tuple(django.VERSION[0:2])
 
 
 class SessionRefreshTokenMiddlewareTestCase(TestCase):
@@ -194,12 +196,17 @@ urlpatterns = list(orig_urlpatterns) + [
 ]
 
 
-def override_middleware(fun):
-    classes = [
-        'django.contrib.sessions.middleware.SessionMiddleware',
-        'mozilla_django_oidc.middleware.SessionRefresh',
-    ]
-    return override_settings(MIDDLEWARE=classes)(fun)
+def override_middleware(middleware):
+    def wrapper(fun):
+        classes = [
+            'django.contrib.sessions.middleware.SessionMiddleware',
+            middleware,
+        ]
+        if DJANGO_VERSION >= (1, 10):
+            return override_settings(MIDDLEWARE=classes)(fun)
+        return override_settings(MIDDLEWARE_CLASSES=classes)(fun)
+
+    return wrapper
 
 
 class UserifiedClientHandler(ClientHandler):
@@ -383,9 +390,10 @@ class SessionRefreshMiddlewareTestCase(TestCase):
         self.assertTrue(not client.session.items())
 
         # The signal we registered should have fired for this user.
-        self.assertEquals(client.user, logged_out_users[0])
+        self.assertEqual(client.user, logged_out_users[0])
 
 
+@override_settings(OIDC_OP_AUTHORIZATION_ENDPOINT='http://example.com/authorize')
 @override_settings(ROOT_URLCONF='tests.test_middleware')
 @override_middleware('mozilla_django_oidc.middleware.RefreshOIDCToken')
 @override_settings(OIDC_OP_TOKEN_ENDPOINT='https://server.example.com/token')
@@ -412,9 +420,9 @@ class RefreshOIDCTokenMiddlewareTestCase(TestCase):
             'new_refresh_token',
             elapsed=time.time() + 121,
         )
-        self.assertEquals(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 200)
         refresh_token = client.session['oidc_refresh_token']
-        self.assertEquals(refresh_token, 'new_refresh_token')
+        self.assertEqual(refresh_token, 'new_refresh_token')
 
     @patch('mozilla_django_oidc.middleware.get_random_string')
     def test_id_token_expiration_time(
@@ -438,10 +446,10 @@ class RefreshOIDCTokenMiddlewareTestCase(TestCase):
             'new_refresh_token2',
             elapsed=time.time() + 130,
         )
-        self.assertEquals(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 200)
 
         # refresh token should not be updated
-        self.assertEquals(
+        self.assertEqual(
             client.session['oidc_refresh_token'],
             'new_refresh_token',
         )
@@ -458,8 +466,8 @@ class RefreshOIDCTokenMiddlewareTestCase(TestCase):
             elapsed=time.time() + 121,
             post=True,
         )
-        self.assertEquals(resp.status_code, 200)
-        self.assertEquals(
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
             client.session['oidc_refresh_token'],
             'new_refresh_token',
         )
@@ -477,8 +485,8 @@ class RefreshOIDCTokenMiddlewareTestCase(TestCase):
             elapsed=time.time() + 239,
             post=True,
         )
-        self.assertEquals(resp.status_code, 200)
-        self.assertEquals(
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
             client.session['oidc_refresh_token'],
             'new_refresh_token',
         )
@@ -503,7 +511,7 @@ class RefreshOIDCTokenMiddlewareTestCase(TestCase):
             resp = client.get('/mdo_fake_view/')
 
             assert not request_mock.called
-            self.assertEquals(resp.status_code, 403)
+            self.assertEqual(resp.status_code, 403)
 
     @override_settings(OIDC_RENEW_REFRESH_TOKEN_EXPIRY_SECONDS=240)
     @override_settings(OIDC_RENEW_REFRESH_TOKEN=True)
@@ -531,7 +539,7 @@ class RefreshOIDCTokenMiddlewareTestCase(TestCase):
             assert not request_mock.called
 
             url, qs = resp.url.split('?')
-            self.assertEquals(url, 'http://example.com/authorize')
+            self.assertEqual(url, 'http://example.com/authorize')
             expected_query = {
                 'response_type': ['code'],
                 'redirect_uri': ['http://testserver/callback/'],
@@ -541,7 +549,7 @@ class RefreshOIDCTokenMiddlewareTestCase(TestCase):
                 'scope': ['openid email'],
                 'state': ['examplestring'],
             }
-            self.assertEquals(expected_query, parse_qs(qs))
+            self.assertEqual(expected_query, parse_qs(qs))
 
     @override_settings(OIDC_RENEW_REFRESH_TOKEN_EXPIRY_SECONDS=240)
     @override_settings(OIDC_RENEW_REFRESH_TOKEN=True)
@@ -567,7 +575,7 @@ class RefreshOIDCTokenMiddlewareTestCase(TestCase):
             resp = client.post('/mdo_fake_view/')
 
             assert not request_mock.called
-            self.assertEquals(resp.status_code, 403)
+            self.assertEqual(resp.status_code, 403)
 
     def _refresh_page(self, client, refersh_token, elapsed, post=False):
         with patch(
@@ -581,6 +589,7 @@ class RefreshOIDCTokenMiddlewareTestCase(TestCase):
                 'accesss_token': 'access_token',
                 'refresh_token': refersh_token,
             }
+            post_json_mock.status_code = 200
             request_mock.post.return_value = post_json_mock
 
             time_func.return_value = elapsed
@@ -595,11 +604,11 @@ class RefreshOIDCTokenMiddlewareTestCase(TestCase):
         # First confirm that the home page is a public page.
         resp = client.get('/')
         # At least security doesn't kick you out.
-        self.assertEquals(resp.status_code, 404)
+        self.assertEqual(resp.status_code, 404)
         # Also check that this page doesn't force you to redirect
         # to authenticate.
         resp = client.get('/mdo_fake_view/')
-        self.assertEquals(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 200)
         client.login(username=self.user.username, password='password')
         # Set expiration to some time in the past
         session = client.session
