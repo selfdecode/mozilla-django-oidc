@@ -557,7 +557,7 @@ class RefreshOIDCTokenMiddlewareTestCase(TestCase):
         OIDC_OP_AUTHORIZATION_ENDPOINT='http://example.com/authorize',
     )
     @patch('mozilla_django_oidc.middleware.get_random_string')
-    def test_refresh_the_refresh_token_using_redirect_error_on_post(
+    def test_does_not_refresh_the_token_on_post(
         self, mock_random_string,
     ):
         mock_random_string.return_value = 'examplestring'
