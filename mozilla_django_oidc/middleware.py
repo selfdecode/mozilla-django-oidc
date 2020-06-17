@@ -10,7 +10,7 @@ except ImportError:
 
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.urls import reverse
-from django.contrib.auth import BACKEND_SESSION_KEY
+from django.contrib.auth import BACKEND_SESSION_KEY, logout as django_logout
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils.crypto import get_random_string
 from django.utils.deprecation import MiddlewareMixin
@@ -84,8 +84,6 @@ class SessionRefresh(MiddlewareMixin):
             is_oidc_enabled = issubclass(auth_backend, OIDCAuthenticationBackend)
 
         return (
-            request.method == 'GET' and
-            request.user.is_authenticated and
             (not get_only or request.method == 'GET') and
             is_authenticated(request.user) and
             is_oidc_enabled and
@@ -180,10 +178,15 @@ class RefreshOIDCToken(SessionRefresh):
             renew_refresh_token = import_from_settings(
                 'OIDC_RENEW_REFRESH_TOKEN', False,
             )
+            # Since SessionRefresh ignore POST requests, refresh tokens
+            # expired during POST requests are not passed to super class.
             if renew_refresh_token and request.method.upper() == 'GET':
                 return super(RefreshOIDCToken, self).process_request(request)
             else:
-                raise PermissionDenied('Refresh token expired')
+                # Force logout the user to manually login again with a
+                # valid session.
+                django_logout(request)
+                raise PermissionDenied('Refresh token expired on POST.')
 
         if not refresh_token:
             LOGGER.debug('no refresh token stored')
@@ -201,7 +204,11 @@ class RefreshOIDCToken(SessionRefresh):
             data=token_payload,
             verify=import_from_settings('OIDC_VERIFY_SSL', True),
         )
-        response.raise_for_status()
+        if response.status_code != 200:
+            # Force logout the user to manually login again with a
+            # valid session.
+            django_logout(request)
+            raise PermissionDenied('Error during refresh_token grant request.')
 
         token_info = response.json()
         id_token = token_info.get('id_token')
