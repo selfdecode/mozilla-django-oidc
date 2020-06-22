@@ -23,4 +23,9 @@ urlpatterns = [
     url(r'^authenticate/$', OIDCAuthenticateClass.as_view(),
         name='oidc_authentication_init'),
     url(r'^logout/$', views.OIDCLogoutView.as_view(), name='oidc_logout'),
+    url(
+        r'^backchannel-logout/$',
+        views.OIDCBackChannelLogoutView.as_view(),
+        name='oidc_backchannel_logout',
+    ),
 ]

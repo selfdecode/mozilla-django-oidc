@@ -1,3 +1,4 @@
+import importlib
 import warnings
 
 try:
@@ -32,6 +33,26 @@ def import_from_settings(attr, *args):
         return getattr(settings, attr)
     except AttributeError:
         raise ImproperlyConfigured('Setting {0} not found'.format(attr))
+
+
+def import_function_from_settings(attr):
+    """
+    Attempt to import a class from a string representation.
+    """
+    value = import_from_settings(attr, None)
+    if not value:
+        return None
+
+    try:
+        parts = value.split('.')
+        module_path, class_name = '.'.join(parts[:-1]), parts[-1]
+        module = importlib.import_module(module_path)
+        return getattr(module, class_name)
+    except ImportError as e:
+        msg = 'Could not import %s for settings. %s: %s.' % (
+            value, e.__class__.__name__, e,
+        )
+        raise ImportError(msg)
 
 
 def absolutify(request, path):

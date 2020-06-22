@@ -25,7 +25,6 @@ from mozilla_django_oidc.auth import (
 from mozilla_django_oidc.utils import (
     absolutify,
     import_from_settings,
-    is_authenticated,
 )
 
 
@@ -85,7 +84,7 @@ class SessionRefresh(MiddlewareMixin):
 
         return (
             (not get_only or request.method == 'GET') and
-            is_authenticated(request.user) and
+            request.user.is_authenticated and
             is_oidc_enabled and
             request.path not in self.exempt_urls
         )
