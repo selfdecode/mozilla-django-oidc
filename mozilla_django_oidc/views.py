@@ -1,4 +1,7 @@
+from django.views.decorators.csrf import csrf_exempt
+
 from mozilla_django_oidc.auth import store_expiration_times
+from mozilla_django_oidc.token import JwsToken
 
 try:
     from urllib.parse import urlencode
@@ -6,16 +9,17 @@ except ImportError:
     # Python < 3
     from urllib import urlencode
 
-from django.core.exceptions import SuspiciousOperation
+from django.core.exceptions import SuspiciousOperation, ValidationError
 from django.urls import reverse
 from django.contrib import auth
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, HttpResponse
 from django.utils.crypto import get_random_string
 from django.utils.http import is_safe_url
 from django.utils.module_loading import import_string
 from django.views.generic import View
 
-from mozilla_django_oidc.utils import absolutify, import_from_settings
+from mozilla_django_oidc.utils import absolutify, import_from_settings, \
+    import_function_from_settings
 
 
 class OIDCAuthenticationCallbackView(View):
@@ -83,8 +87,20 @@ class OIDCAuthenticationCallbackView(View):
             self.user = auth.authenticate(**kwargs)
 
             if self.user and self.user.is_active:
-                return self.login_success()
+                response = self.login_success()
+                self._update_session_state(request)
+                return response
+
         return self.login_failure()
+
+    @staticmethod
+    def _update_session_state(request):
+        session_start_hook = import_function_from_settings(
+            'OIDC_SESSION_START_HOOK',
+        )
+        session_state = request.GET.get('session_state')
+        if session_start_hook and session_state:
+            session_start_hook(request, session_state=session_state)
 
 
 def get_next_url(request, redirect_field_name):
@@ -199,3 +215,34 @@ class OIDCLogoutView(View):
             auth.logout(request)
 
         return HttpResponseRedirect(logout_url)
+
+
+class OIDCBackChannelLogoutView(View):
+    """Back-channel Logout helper view."""
+
+    http_method_names = ['post']
+
+    @csrf_exempt
+    def dispatch(self, request, *args, **kwargs):
+        return super(OIDCBackChannelLogoutView, self).dispatch(
+            request, *args, **kwargs
+        )
+
+    def post(self, request):
+        """Log out the user."""
+        logout_token = request.POST.get('logout_token')
+        if not logout_token:
+            raise ValidationError('logout_token required')
+
+        token = JwsToken(logout_token)
+        self._terminate_session(request, token.payload['sid'])
+
+        return HttpResponse('OK', status=200)
+
+    @staticmethod
+    def _terminate_session(request, session_state):
+        session_terminate_hook = import_function_from_settings(
+            'OIDC_SESSION_TERMINATE_HOOK',
+        )
+        if session_terminate_hook and session_state:
+            session_terminate_hook(request, session_state=session_state)
