@@ -190,7 +190,6 @@ class RefreshOIDCToken(SessionRefresh):
         response = requests.post(
             token_url,
             data=token_payload,
-            verify=import_from_settings('OIDC_VERIFY_SSL', True),
         )
         if response.status_code != 200:
             LOGGER.info('Error renewing refresh token.')
