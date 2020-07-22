@@ -11,6 +11,7 @@ except ImportError:
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.urls import reverse
 from django.contrib.auth import BACKEND_SESSION_KEY, logout as django_logout
+
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils.crypto import get_random_string
 from django.utils.deprecation import MiddlewareMixin
@@ -23,8 +24,7 @@ from mozilla_django_oidc.auth import (
     store_expiration_times,
 )
 from mozilla_django_oidc.utils import (
-    absolutify,
-    import_from_settings,
+    absolutify, add_state_and_nonce_to_session, import_from_settings,
 )
 
 
@@ -133,9 +133,9 @@ class SessionRefresh(MiddlewareMixin):
             params.update({
                 'nonce': nonce
             })
-            request.session['oidc_nonce'] = nonce
 
-        request.session['oidc_state'] = state
+        add_state_and_nonce_to_session(request, state, params)
+
         request.session['oidc_login_next'] = request.get_full_path()
 
         query = urlencode(params)

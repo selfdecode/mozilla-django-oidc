@@ -53,6 +53,26 @@ of ``mozilla-django-oidc``.
 
    Controls whether the OpenID Connect client verifies the SSL certificate of the OP responses
 
+.. py:attribute:: OIDC_TIMEOUT
+
+   :default: ``None``
+
+    Defines a timeout for all requests to the OpenID Connect provider (fetch JWS,
+    retrieve JWT tokens, Userinfo Endpoint). The default is set to `None` which means
+    the library will wait indefinitely. The time can be defined as seconds (integer).
+    More information about possible configuration values, see Python `requests`:
+    https://requests.readthedocs.io/en/master/user/quickstart/#timeouts
+
+.. py:attribute:: OIDC_PROXY
+
+   :default: ``None``
+
+    Defines a proxy for all requests to the OpenID Connect provider (fetch JWS,
+    retrieve JWT tokens, Userinfo Endpoint). The default is set to `None` which means
+    the library will not use a proxy and connect directly. For configuring a proxy
+    check the Python `requests` documentation:
+    https://requests.readthedocs.io/en/master/user/advanced/#proxies
+
 .. py:attribute:: OIDC_EXEMPT_URLS
 
    :default: ``[]``
@@ -78,6 +98,13 @@ of ``mozilla-django-oidc``.
    :default: ``32``
 
    Sets the length of the random string used for OpenID Connect nonce verification
+
+.. py:attribute:: OIDC_MAX_STATES
+
+   :default: ``50``
+
+   Sets the maximum number of State / Nonce combinations stored in the session.
+   Multiple combinations are used when the user does multiple concurrent login sessions.
 
 .. py:attribute:: OIDC_REDIRECT_FIELD_NAME
 

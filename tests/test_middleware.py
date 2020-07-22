@@ -63,8 +63,8 @@ class SessionRefreshTokenMiddlewareTestCase(TestCase):
     @override_settings(OIDC_RP_CLIENT_ID='foo')
     @override_settings(OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS=120)
     @patch('mozilla_django_oidc.middleware.get_random_string')
-    def test_is_ajax(self, mock_random_string):
-        mock_random_string.return_value = 'examplestring'
+    def test_is_ajax(self, mock_middleware_random):
+        mock_middleware_random.return_value = 'examplestring'
 
         request = self.factory.get(
             '/foo',
@@ -97,8 +97,8 @@ class SessionRefreshTokenMiddlewareTestCase(TestCase):
     @override_settings(OIDC_RP_CLIENT_ID='foo')
     @override_settings(OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS=120)
     @patch('mozilla_django_oidc.middleware.get_random_string')
-    def test_no_oidc_token_expiration_forces_renewal(self, mock_random_string):
-        mock_random_string.return_value = 'examplestring'
+    def test_no_oidc_token_expiration_forces_renewal(self, mock_middleware_random):
+        mock_middleware_random.return_value = 'examplestring'
 
         request = self.factory.get('/foo')
         request.user = self.user
@@ -124,8 +124,8 @@ class SessionRefreshTokenMiddlewareTestCase(TestCase):
     @override_settings(OIDC_RP_CLIENT_ID='foo')
     @override_settings(OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS=120)
     @patch('mozilla_django_oidc.middleware.get_random_string')
-    def test_expired_token_forces_renewal(self, mock_random_string):
-        mock_random_string.return_value = 'examplestring'
+    def test_expired_token_forces_renewal(self, mock_middleware_random):
+        mock_middleware_random.return_value = 'examplestring'
 
         request = self.factory.get('/foo')
         request.user = self.user
@@ -303,8 +303,8 @@ class SessionRefreshMiddlewareTestCase(TestCase):
     @override_settings(OIDC_RP_CLIENT_ID='foo')
     @override_settings(OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS=120)
     @patch('mozilla_django_oidc.middleware.get_random_string')
-    def test_expired_token_redirects_to_sso(self, mock_random_string):
-        mock_random_string.return_value = 'examplestring'
+    def test_expired_token_redirects_to_sso(self, mock_middleware_random):
+        mock_middleware_random.return_value = 'examplestring'
 
         client = ClientWithUser()
         client.login(username=self.user.username, password='password')
