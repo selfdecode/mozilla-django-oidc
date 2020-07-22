@@ -11,6 +11,7 @@ except ImportError:
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.urls import reverse
 from django.contrib.auth import BACKEND_SESSION_KEY, logout as django_logout
+
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils.crypto import get_random_string
 from django.utils.deprecation import MiddlewareMixin
@@ -23,8 +24,7 @@ from mozilla_django_oidc.auth import (
     store_expiration_times,
 )
 from mozilla_django_oidc.utils import (
-    absolutify,
-    import_from_settings,
+    absolutify, add_state_and_nonce_to_session, import_from_settings,
 )
 
 
@@ -133,9 +133,9 @@ class SessionRefresh(MiddlewareMixin):
             params.update({
                 'nonce': nonce
             })
-            request.session['oidc_nonce'] = nonce
 
-        request.session['oidc_state'] = state
+        add_state_and_nonce_to_session(request, state, params)
+
         request.session['oidc_login_next'] = request.get_full_path()
 
         query = urlencode(params)
@@ -174,18 +174,7 @@ class RefreshOIDCToken(SessionRefresh):
         refresh_token = request.session.get('oidc_refresh_token')
 
         if self._is_refresh_token_expired(request):
-            renew_refresh_token = import_from_settings(
-                'OIDC_RENEW_REFRESH_TOKEN', False,
-            )
-            # Since SessionRefresh ignore POST requests, refresh tokens
-            # expired during POST requests are not passed to super class.
-            if renew_refresh_token and request.method.upper() == 'GET':
-                return super(RefreshOIDCToken, self).process_request(request)
-            else:
-                # Force logout the user to manually login again with a
-                # valid session.
-                django_logout(request)
-                raise PermissionDenied('Refresh token expired on POST.')
+            return self._handle_refresh_token_expire(request)
 
         if not refresh_token:
             LOGGER.debug('no refresh token stored')
@@ -201,13 +190,10 @@ class RefreshOIDCToken(SessionRefresh):
         response = requests.post(
             token_url,
             data=token_payload,
-            verify=import_from_settings('OIDC_VERIFY_SSL', True),
         )
         if response.status_code != 200:
-            # Force logout the user to manually login again with a
-            # valid session.
-            django_logout(request)
-            raise PermissionDenied('Error during refresh_token grant request.')
+            LOGGER.info('Error renewing refresh token.')
+            return self._handle_refresh_token_expire(request)
 
         token_info = response.json()
         id_token = token_info.get('id_token')
@@ -216,6 +202,20 @@ class RefreshOIDCToken(SessionRefresh):
 
         store_expiration_times(request.session)
         store_tokens(request.session, access_token, id_token, refresh_token)
+
+    def _handle_refresh_token_expire(self, request):
+        renew_refresh_token = import_from_settings(
+            'OIDC_RENEW_REFRESH_TOKEN', False,
+        )
+        # Since SessionRefresh ignore POST requests, refresh tokens
+        # expired during POST requests are not passed to super class.
+        if renew_refresh_token and request.method.upper() == 'GET':
+            return super(RefreshOIDCToken, self).process_request(request)
+        else:
+            # Force logout the user to manually login again with a
+            # valid session.
+            django_logout(request)
+            raise PermissionDenied('Refresh token expired on POST.')
 
     @staticmethod
     def _is_refresh_token_expired(request):
