@@ -308,8 +308,9 @@ class OIDCAuthenticationBackend(ModelBackend):
                 user = self.get_or_create_user(access_token, id_token, payload)
 
                 # refresh the session if user is changed.
-                if request.user.is_authenticated \
-                   and request.user.pk != user.pk:
+                if hasattr(request, 'user') and \
+                   request.user.is_authenticated and \
+                   request.user.pk != user.pk:
                     request.session.flush()
 
                 store_tokens(
