@@ -304,9 +304,20 @@ class OIDCAuthenticationBackend(ModelBackend):
         # Validate the token
         payload = self.verify_token(id_token, nonce=nonce)
         if payload:
-            store_tokens(self.request.session, access_token, id_token, refresh_token)
             try:
-                return self.get_or_create_user(access_token, id_token, payload)
+                user = self.get_or_create_user(access_token, id_token, payload)
+
+                # refresh the session if user is changed.
+                if request.user.is_authenticated \
+                   and request.user.pk != user.pk:
+                    request.session.flush()
+
+                store_tokens(
+                    self.request.session,
+                    access_token, id_token, refresh_token,
+                )
+
+                return user
             except SuspiciousOperation as exc:
                 LOGGER.warning('failed to get or create user: %s', exc)
                 return None
